@@ -10,7 +10,7 @@ from telegram.ext import (
 from config import API_TOKEN, OWNER_ID
 
 # ID atau username channel testimoni
-force_subscribe_channel = "@testimoniserpa"
+force_subscribe_channel = "https://t.me/tesddrw"
 
 # Setup logging
 logging.basicConfig(
@@ -26,7 +26,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("🛍 Beli Prem Sekarang", callback_data="menu")],
         [InlineKeyboardButton("👤 CS", url="https://t.me/serpagengs")],
-        [InlineKeyboardButton("📢 Testimoni", url="https://t.me/testimoniserpa")]
+        [InlineKeyboardButton("📢 Testimoni", url="https://t.me/tesddrw")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(welcome_text, reply_markup=reply_markup)
@@ -100,11 +100,11 @@ async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
     file = await update.message.photo[-1].get_file()
     context.user_data["bukti_transfer_file_id"] = file.file_id
 
-    # Cek apakah user sudah join channel testimoni
+    # Cek apakah user sudah join channel moni
     if not await check_user_subscribed(context.bot, user.id):
         keyboard = [[InlineKeyboardButton("✅ Sudah Join", callback_data="sudah_join_channel")]]
         await update.message.reply_text(
-            f"❗️Untuk melanjutkan, silakan join channel testimoni terlebih dahulu:\n{force_subscribe_channel}",
+            f"❗️Untuk melanjutkan, silakan join channel moni terlebih dahulu:\n{force_subscribe_channel}",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         return
