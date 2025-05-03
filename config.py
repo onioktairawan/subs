@@ -11,7 +11,7 @@ API_TOKEN = os.getenv("TELEGRAM_API_TOKEN")
 # MongoDB connection
 MONGO_URI = os.getenv("MONGO_URI")
 client = MongoClient(MONGO_URI)
-db = client.get_database()
+db = client.get_database('subs_bot')
 
 # Collection references
 users_collection = db.users
