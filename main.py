@@ -70,7 +70,7 @@ def handle_payment_proof(client, message):
     else:
         message.reply("Anda sudah mengirim bukti atau belum memulai dari /start")
 
-@bot.on_message(filters.private & filters.text & ~filters.command)
+@bot.on_message(filters.private & filters.text & ~filters.regex(r"^/"))
 def handle_text_input(client, message):
     user_id = message.from_user.id
     user = users_col.find_one({"_id": user_id})
