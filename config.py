@@ -1,22 +1,18 @@
 import os
-from dotenv import load_dotenv
 from pymongo import MongoClient
+from dotenv import load_dotenv
 
-# Load environment variables
 load_dotenv()
 
-# Telegram bot token
-API_TOKEN = os.getenv("TELEGRAM_API_TOKEN")
+API_TOKEN = os.getenv("API_TOKEN")
+OWNER_ID = int(os.getenv("OWNER_ID"))
+CHANNEL_ID = int(os.getenv("CHANNEL_ID"))
 
-# MongoDB connection
 MONGO_URI = os.getenv("MONGO_URI")
+DB_NAME = os.getenv("DB_NAME")
+
 client = MongoClient(MONGO_URI)
-db = client.get_database('subs_bot')
+db = client[DB_NAME]
 
-# Collection references
-users_collection = db.users
-logs_collection = db.logs
-
-# Owner info
-OWNER_ID = os.getenv("OWNER_ID")
-CHANNEL_ID = os.getenv("CHANNEL_ID")
+users_collection = db["users"]
+logs_collection = db["logs"]
