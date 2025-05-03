@@ -1,136 +1,136 @@
-import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Updater, CommandHandler, MessageHandler, filters, CallbackQueryHandler, ConversationHandler
-from pymongo import MongoClient
 import os
-from dotenv import load_dotenv
-import datetime
+from pyrogram import Client, filters
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from pymongo import MongoClient
+from config import OWNER_ID, MONGO_URI, CHANNEL_ID, BOT_TOKEN, API_ID, API_HASH
 
-# Load environment variables
-load_dotenv()
-
-# Set up logging
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                    level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# MongoDB setup
-client = MongoClient(os.getenv("MONGO_URI"))
-db = client["business_bot"]
+# Koneksi MongoDB
+client = MongoClient(MONGO_URI)
+db = client["teleprem"]
+transactions_collection = db["transactions"]
 users_collection = db["users"]
-logs_collection = db["logs"]
 
-# Ganti dengan token bot Telegram Anda dari .env
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-OWNER_ID = int(os.getenv("OWNER_ID"))
+# Inisialisasi bot dengan Pyrogram
+app = Client("teleprem_bot", bot_token=BOT_TOKEN, api_id=API_ID, api_hash=API_HASH)
 
-# Fungsi untuk log pesan
-def log_message(user_id, message):
-    logs_collection.insert_one({
+# Fungsi untuk mengirim pesan ke Owner
+async def send_to_owner(message):
+    await app.send_message(OWNER_ID, message)
+
+# Fungsi untuk mengambil data pengguna dari MongoDB
+def get_user(user_id):
+    return users_collection.find_one({"user_id": user_id})
+
+# Fungsi untuk memperbarui data pengguna di MongoDB
+def update_user(user_id, update_data):
+    users_collection.update_one({"user_id": user_id}, {"$set": update_data})
+
+# Fungsi untuk menambahkan transaksi baru
+def create_transaction(user_id, amount):
+    transactions_collection.insert_one({
         "user_id": user_id,
-        "message": message,
-        "timestamp": datetime.datetime.now()
+        "amount": amount,
+        "status": "pending"
     })
 
-# Fungsi untuk menampilkan log (hanya untuk owner)
-def get_log(update, context):
-    if update.message.chat_id == OWNER_ID:
-        logs = logs_collection.find()
-        log_text = "\n".join([f"User {log['user_id']}: {log['message']}" for log in logs])
-        update.message.reply_text(log_text)
-    else:
-        update.message.reply_text("You are not authorized to view the logs.")
+# Handle /start command
+@app.on_message(filters.command("start"))
+async def start(client, message):
+    user_id = message.from_user.id
+    username = message.from_user.username or "unknown"
 
-# Konstanta untuk step conversation
-SELECT_DURATION, SELECT_PAYMENT_METHOD = range(2)
+    # Cek apakah user sudah terdaftar
+    user = get_user(user_id)
+    if not user:
+        users_collection.insert_one({
+            "user_id": user_id,
+            "username": username,
+            "step": "awaiting_payment"
+        })
 
-# Fungsi untuk tombol /start
-def start(update, context):
-    keyboard = [
-        [InlineKeyboardButton("Beli Prem Sekarang", callback_data='buy_prem')]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    update.message.reply_text('Selamat datang! Tekan tombol di bawah untuk memulai.', reply_markup=reply_markup)
-
-# Fungsi untuk memulai pembelian
-def buy_prem(update, context):
-    keyboard = [
-        [InlineKeyboardButton("1 Bulan", callback_data='1')],
-        [InlineKeyboardButton("3 Bulan", callback_data='3')],
-        [InlineKeyboardButton("6 Bulan", callback_data='6')],
-        [InlineKeyboardButton("12 Bulan", callback_data='12')]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    update.message.reply_text("Berapa bulan yang ingin Anda beli?", reply_markup=reply_markup)
-    return SELECT_DURATION
-
-# Fungsi untuk memilih durasi
-def select_duration(update, context):
-    query = update.callback_query
-    context.user_data['duration'] = query.data  # Simpan durasi yang dipilih
-    query.edit_message_text(text=f"Durasi {query.data} bulan dipilih. Sekarang pilih metode pembayaran.")
-    
-    keyboard = [
-        [InlineKeyboardButton("QRIS", callback_data='qris')],
-        [InlineKeyboardButton("Bank", callback_data='bank')],
-        [InlineKeyboardButton("DANA", callback_data='dana')],
-        [InlineKeyboardButton("Gopay", callback_data='gopay')]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    query.message.reply_text("Pilih metode pembayaran:", reply_markup=reply_markup)
-    return SELECT_PAYMENT_METHOD
-
-# Fungsi untuk memilih metode pembayaran
-def select_payment_method(update, context):
-    query = update.callback_query
-    method = query.data
-    duration = context.user_data.get('duration')
-
-    payment_info = {
-        "qris": f"Nomor Rekening: 12345\nNama Penerima: John Doe\nQRIS Link: example.com/qris (Durasi: {duration} bulan)",
-        "bank": f"Nomor Rekening: 12345\nNama Penerima: John Doe (Durasi: {duration} bulan)",
-        "dana": f"Nomor Rekening: 12345\nNama Penerima: John Doe\nDANA Link: example.com/dana (Durasi: {duration} bulan)",
-        "gopay": f"Nomor Rekening: 12345\nNama Penerima: John Doe\nGopay Link: example.com/gopay (Durasi: {duration} bulan)"
-    }
-    
-    query.edit_message_text(text=payment_info[method])
-    query.message.reply_text("Silakan kirim bukti transfer Anda untuk melanjutkan.")
-    return ConversationHandler.END
-
-# Fungsi untuk menangani pengiriman bukti transfer
-def handle_media(update, context):
-    user_id = update.message.from_user.id
-    if update.message.photo or update.message.document:
-        log_message(user_id, "Bukti transfer diterima.")
-        update.message.reply_text("Terima kasih! Silakan subscribe ke channel testimoni.")
-        # Lakukan force subscribe ke channel testimoni
-        # (Logika force subscribe akan ditambahkan nanti)
-    else:
-        update.message.reply_text("Harap kirim bukti transfer dalam bentuk foto atau file.")
-
-# Fungsi utama untuk menjalankan bot
-def main():
-    updater = Updater(TELEGRAM_TOKEN, use_context=True)
-    dp = updater.dispatcher
-
-    # ConversationHandler untuk alur pembelian
-    conv_handler = ConversationHandler(
-        entry_points=[CallbackQueryHandler(buy_prem, pattern='^buy_prem$')],
-        states={
-            SELECT_DURATION: [CallbackQueryHandler(select_duration)],
-            SELECT_PAYMENT_METHOD: [CallbackQueryHandler(select_payment_method)],
-        },
-        fallbacks=[],
+    # Kirim pesan dengan tombol inline
+    await message.reply(
+        "Selamat datang! Pilih menu di bawah:",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("Menu", callback_data="menu")],
+            [InlineKeyboardButton("CS", callback_data="cs")],
+            [InlineKeyboardButton("Testimoni", callback_data="testimoni")]
+        ])
     )
 
-    # Handlers
-    dp.add_handler(conv_handler)
-    dp.add_handler(MessageHandler(Filters.photo | Filters.document, handle_media))
-    dp.add_handler(CommandHandler("log", get_log))  # Hanya untuk owner
+# Handle tombol menu
+@app.on_callback_query(filters.regex("menu"))
+async def menu(client, query):
+    await query.answer()
+    await query.message.edit(
+        "Pilih durasi pembelian:\n1. 1 bulan\n2. 3 bulan\n3. 6 bulan\n4. 12 bulan",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("1 Bulan", callback_data="buy_1_month")],
+            [InlineKeyboardButton("3 Bulan", callback_data="buy_3_months")],
+            [InlineKeyboardButton("6 Bulan", callback_data="buy_6_months")],
+            [InlineKeyboardButton("12 Bulan", callback_data="buy_12_months")]
+        ])
+    )
 
-    # Start the bot
-    updater.start_polling()
-    updater.idle()
+# Handle pemilihan durasi pembelian
+@app.on_callback_query(filters.regex("buy_"))
+async def buy_duration(client, query):
+    duration = query.data.split("_")[-1]
+    user_id = query.from_user.id
+    user = get_user(user_id)
 
-if __name__ == '__main__':
-    main()
+    # Simpan transaksi ke MongoDB dengan status pending
+    create_transaction(user_id, duration)
+
+    await query.answer("Silakan kirim bukti transfer sebagai media.")
+
+# Handle bukti transfer
+@app.on_message(filters.media)
+async def handle_transfer(client, message):
+    user_id = message.from_user.id
+    user = get_user(user_id)
+
+    if user and user['step'] == 'awaiting_payment':
+        # Simpan bukti transfer dan update status transaksi
+        transaction = transactions_collection.find_one({"user_id": user_id, "status": "pending"})
+        transactions_collection.update_one({"_id": transaction["_id"]}, {"$set": {"status": "awaiting_confirmation"}})
+
+        # Kirim notifikasi ke owner
+        transaction_details = f"""
+        Transaksi baru dari User @{user['username']}:
+        - Durasi Pembelian: {transaction['amount']}
+        - Pembayaran: Bukti Transfer Diterima
+        """
+        await send_to_owner(transaction_details)
+
+        await message.reply("Bukti transfer diterima, menunggu konfirmasi dari owner.")
+
+# Handle konfirmasi pembayaran dari Owner
+@app.on_callback_query(filters.regex("confirm_payment"))
+async def confirm_payment(client, query):
+    user_id = query.from_user.id
+    user = get_user(user_id)
+
+    if user and user['step'] == 'awaiting_confirmation':
+        # Update status transaksi dan user
+        transaction = transactions_collection.find_one({"user_id": user_id, "status": "awaiting_confirmation"})
+        transactions_collection.update_one({"_id": transaction["_id"]}, {"$set": {"status": "confirmed"}})
+
+        update_user(user_id, {"step": "awaiting_phone_number"})
+
+        await query.answer("Pembayaran telah dikonfirmasi. Lanjutkan ke proses berikutnya.")
+
+# Handle button lainnya seperti CS, Testimoni
+@app.on_callback_query(filters.regex("cs"))
+async def cs(client, query):
+    await query.answer()
+    await query.message.edit("Anda dapat menghubungi Owner di sini!")
+
+@app.on_callback_query(filters.regex("testimoni"))
+async def testimoni(client, query):
+    await query.answer()
+    await query.message.edit("Silakan kunjungi Channel Testimoni kami!")
+    await app.send_message(CHANNEL_ID, "Terima kasih telah bergabung di channel testimoni kami!")
+
+if __name__ == "__main__":
+    app.run()
