@@ -45,7 +45,7 @@ user_data_store = {}
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     teks = "📦 Daftar Produk:\n\n"
     for p in produk_list:
-        teks += f"{p['id']}. {p[✨'nama']} - Rp {p['harga']:,}\n"
+        teks += f"{p['id']}. {p✨['nama']} - Rp {p['harga']:,}\n"
     keyboard = [
         [InlineKeyboardButton("🛒 Beli Disini", callback_data="beli")],
         [InlineKeyboardButton("📞 CS", callback_data="cs"),
