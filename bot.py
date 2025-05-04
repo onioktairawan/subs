@@ -178,9 +178,9 @@ if __name__ == '__main__':
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
-            PILIH_BULAN: [CallbackQueryHandler(button_handler, per_message=True)],
-            KONFIRMASI: [CallbackQueryHandler(button_handler, per_message=True)],
-            METODE_BAYAR: [CallbackQueryHandler(button_handler, per_message=True)],
+            PILIH_BULAN: [CallbackQueryHandler(button_handler)],
+            KONFIRMASI: [CallbackQueryHandler(button_handler)],
+            METODE_BAYAR: [CallbackQueryHandler(button_handler)],
             KIRIM_BUKTI: [MessageHandler(filters.PHOTO, handle_media)],
             INPUT_NOHP: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text)],
             INPUT_OTP: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text)],
